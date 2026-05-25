@@ -919,3 +919,68 @@ body {
   background: rgba(158, 158, 158, 0.15);
   color: #9e9e9e;
 }
+/* -- Theme Toggle Button -- */
+.theme-toggle {
+  position: absolute;
+  top: 30px;
+  right: 30px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+  font-size: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+/* -- Light Mode Overrides -- */
+body.light-mode {
+  --bg-deep: #f1f5f9;
+  --bg-mid: #f8fafc;
+  --bg-upper: #ffffff;
+  
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(0, 0, 0, 0.08);
+  --card-hover-shadow: rgba(0, 0, 0, 0.08);
+  
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+body.light-mode table th {
+  background: #f1f5f9;
+  border-bottom-color: #e2e8f0;
+}
+body.light-mode table td {
+  border-bottom-color: #e2e8f0;
+}
+body.light-mode .card {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+body.light-mode .input-area {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+body.light-mode .input-area::placeholder {
+  color: #94a3b8;
+}
+body.light-mode .theme-toggle {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+body.light-mode .theme-toggle:hover {
+  background: #f1f5f9;
+}

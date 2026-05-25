@@ -377,3 +377,26 @@ function showToast(message, type = 'info') {
 // Initialize
 // ============================================================
 scrapeBtn.disabled = true;
+
+// ============================================================
+// THEME TOGGLE LOGIC
+// ============================================================
+const themeToggleBtn = document.getElementById('theme-toggle');
+if (themeToggleBtn) {
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'light') {
+    document.body.classList.add('light-mode');
+    themeToggleBtn.textContent = '??';
+  }
+
+  themeToggleBtn.addEventListener('click', () => {
+    document.body.classList.toggle('light-mode');
+    if (document.body.classList.contains('light-mode')) {
+      localStorage.setItem('theme', 'light');
+      themeToggleBtn.textContent = '??';
+    } else {
+      localStorage.setItem('theme', 'dark');
+      themeToggleBtn.textContent = '??';
+    }
+  });
+}
