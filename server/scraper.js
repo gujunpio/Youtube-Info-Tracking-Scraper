@@ -93,7 +93,14 @@ function normalizeChannelUrl(rawUrl) {
  */
 function fetchVideoDate(url) {
   return new Promise((resolve) => {
-    https.get(url, (res) => {
+    const options = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Cookie': 'CONSENT=YES+cb; PREF=f6=40000000&hl=en',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    };
+    https.get(url, options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -103,6 +110,21 @@ function fetchVideoDate(url) {
       res.on('error', () => resolve(null));
     }).on('error', () => resolve(null));
   });
+}
+
+/**
+ * Helper: Parse subscriber text into number
+ */
+function parseSubscribers(subText) {
+  if (!subText) return 0;
+  const match = subText.match(/([\d.,]+)\s*([KMBTkmbt]?)/);
+  if (!match) return 0;
+  let num = parseFloat(match[1].replace(/,/g, ''));
+  const unit = match[2].toUpperCase();
+  if (unit === 'K') num *= 1000;
+  else if (unit === 'M') num *= 1000000;
+  else if (unit === 'B') num *= 1000000000;
+  return num;
 }
 
 /**
@@ -119,10 +141,24 @@ function calculateChannelMetrics(videos) {
       if (v.exactDate) {
         timestamp = new Date(v.exactDate).getTime();
       }
-      // Fallback for "minutes ago" or "hours ago" -> Today
+      // Fallback for relative dates
       if (!timestamp && v.publishDate) {
          if (/hour|giờ|時間|시간|час|stunde|hora|heure|minute|phút|分|분|минут|segundo|second|giây/i.test(v.publishDate)) {
             timestamp = new Date().getTime(); // Today
+         } else {
+            // Backup parsing if exactDate fails
+            const timeMatch = v.publishDate.match(/(\d+)\s*(day|week|month|year|ngày|tuần|tháng|năm|tag|woche|monat|jahr|jour|semaine|mois|an|día|semana|mes|año)/i);
+            if (timeMatch) {
+               const num = parseInt(timeMatch[1], 10);
+               const unit = timeMatch[2].toLowerCase();
+               let daysSub = 0;
+               if (/day|ngày|tag|jour|día/.test(unit)) daysSub = num;
+               else if (/week|tuần|woche|semaine|semana/.test(unit)) daysSub = num * 7;
+               else if (/month|tháng|monat|mois|mes/.test(unit)) daysSub = num * 30;
+               else if (/year|năm|jahr|an|año/.test(unit)) daysSub = num * 365;
+               
+               timestamp = new Date().getTime() - (daysSub * 24 * 60 * 60 * 1000);
+            }
          }
       }
       return { ...v, timestamp };
@@ -132,7 +168,13 @@ function calculateChannelMetrics(videos) {
 
   const N = validVideos.length;
   if (N === 0) {
-    return { frequencyText: 'N/A', latestVideoDateText: videos[0].publishDate || 'N/A', status: 'active' };
+    return { 
+      frequencyText: 'N/A', 
+      latestVideoDateText: videos[0].publishDate || 'N/A', 
+      status: 'active',
+      latestVideoUrl: videos[0].url || '',
+      latestVideoTitle: videos[0].title || ''
+    };
   }
 
   const latestVideo = validVideos[0];
@@ -190,7 +232,7 @@ function calculateChannelMetrics(videos) {
 /**
  * Scrape a single YouTube channel.
  */
-async function scrapeChannel(channelUrl) {
+async function scrapeChannel(channelUrl, seenIds = new Set()) {
   const browser = await initBrowser();
   const page = await browser.newPage();
 
@@ -454,6 +496,11 @@ async function scrapeChannel(channelUrl) {
       return { channelName, channelLink, channelId, subscriberCount, channelDescription, videos, htmlLang };
     });
 
+    // Check duplicate channel ID early to avoid fetching 20 video dates
+    if (data.channelId && seenIds.has(data.channelId)) {
+      throw new Error(`DUPLICATE_CHANNEL:${data.channelId}`);
+    }
+
     if (!data.subscriberCount) {
       console.warn('[Scraper] Subscriber count not found for', data.channelName);
       const subFallback = await page.evaluate(() => {
@@ -522,6 +569,25 @@ async function scrapeChannel(channelUrl) {
     // Calculate advanced metrics
     const metrics = calculateChannelMetrics(data.videos);
 
+    const subNum = parseSubscribers(data.subscriberCount);
+    const isActive = metrics.status === 'active';
+    let priorityText = '';
+    let priorityClass = '';
+
+    if (!isActive && subNum < 10000) {
+      priorityText = 'Ưu tiên Cao';
+      priorityClass = 'priority-high';
+    } else if (!isActive && subNum >= 10000) {
+      priorityText = 'Ưu tiên Trung bình';
+      priorityClass = 'priority-medium';
+    } else if (isActive && subNum < 10000) {
+      priorityText = 'Ưu tiên Thấp';
+      priorityClass = 'priority-low';
+    } else if (isActive && subNum >= 10000) {
+      priorityText = 'Hạn chế';
+      priorityClass = 'priority-limited';
+    }
+
     return {
       channelName: data.channelName,
       channelLink: data.channelLink,
@@ -534,7 +600,9 @@ async function scrapeChannel(channelUrl) {
       latestVideoDateText: metrics.latestVideoDateText,
       status: metrics.status,
       latestVideoUrl: metrics.latestVideoUrl,
-      latestVideoTitle: metrics.latestVideoTitle
+      latestVideoTitle: metrics.latestVideoTitle,
+      priorityText,
+      priorityClass
     };
   } catch (err) {
     console.error('[Scraper] Error scraping ' + channelUrl + ':', err.message);

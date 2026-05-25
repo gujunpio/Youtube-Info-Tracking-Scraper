@@ -37,10 +37,11 @@ channelInput.addEventListener('input', () => {
 function parseChannelUrls() {
   const text = channelInput.value.trim();
   if (!text) return [];
-  return text
+  const rawUrls = text
     .split('\n')
     .map(line => line.trim())
     .filter(line => line && isValidYoutubeChannel(line));
+  return [...new Set(rawUrls)];
 }
 
 /**
@@ -225,6 +226,11 @@ function addResultRow(result, index) {
     <td class="status-cell">
       <span class="status-badge ${result.status === 'active' ? 'status-active' : 'status-inactive'}">
         ${result.status === 'active' ? 'Kênh đang hoạt động' : 'Kênh dừng hoạt động'}
+      </span>
+    </td>
+    <td class="priority-cell">
+      <span class="priority-badge ${result.priorityClass || ''}">
+        ${escapeHtml(result.priorityText || 'N/A')}
       </span>
     </td>
     <td class="lang-cell"><span class="lang-badge">${escapeHtml(result.language || 'Unknown')}</span></td>

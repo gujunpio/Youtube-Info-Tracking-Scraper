@@ -59,6 +59,7 @@ app.post('/api/scrape', async (req, res) => {
 
   // ---------- Sequential processing ----------
   const results = [];
+  const seenChannelIds = new Set();
 
   for (let i = 0; i < channels.length; i++) {
     // Stop if the client disconnected
@@ -72,15 +73,25 @@ app.post('/api/scrape', async (req, res) => {
     });
 
     try {
-      const result = await scrapeChannel(channels[i]);
+      const result = await scrapeChannel(channels[i], seenChannelIds);
+      if (result.channelId) {
+        seenChannelIds.add(result.channelId);
+      }
       results.push(result);
       sendEvent({ type: 'result', data: result });
     } catch (err) {
       console.error(`[Server] Scrape failed for ${channels[i]}:`, err.message);
+      
+      let msg = err.message;
+      if (msg && msg.startsWith('DUPLICATE_CHANNEL:')) {
+        const dupId = msg.split(':')[1];
+        msg = `Bỏ qua (Trùng lặp kênh: ${dupId})`;
+      }
+      
       sendEvent({
         type: 'error',
         channel: channels[i],
-        message: err.message
+        message: msg
       });
     }
 
@@ -112,6 +123,7 @@ app.post('/api/export/csv', (req, res) => {
     'Video mới nhất',
     'Thời gian đăng mới nhất',
     'Trạng thái',
+    'Mức độ ưu tiên',
     'Ngôn ngữ',
     'Subscribers'
   ];
@@ -128,6 +140,7 @@ app.post('/api/export/csv', (req, res) => {
       r.latestVideoUrl || '',
       `"${(r.latestVideoDateText || '').replace(/"/g, '""')}"`,
       r.status === 'active' ? 'Hoạt động' : 'Dừng hoạt động',
+      `"${(r.priorityText || 'N/A').replace(/"/g, '""')}"`,
       `"${(r.language || 'Unknown').replace(/"/g, '""')}"`,
       `"${(r.subscriberCount || 'N/A').replace(/"/g, '""')}"`
     ];
@@ -162,6 +175,7 @@ app.post('/api/export/excel', async (req, res) => {
       { header: 'Video mới nhất', key: 'latestVideo', width: 45 },
       { header: 'Thời gian đăng', key: 'latestDate', width: 30 },
       { header: 'Trạng thái', key: 'status', width: 20 },
+      { header: 'Mức độ ưu tiên', key: 'priority', width: 25 },
       { header: 'Ngôn ngữ', key: 'language', width: 15 },
       { header: 'Subscribers', key: 'subscribers', width: 20 }
     ];
@@ -186,6 +200,7 @@ app.post('/api/export/excel', async (req, res) => {
         latestVideo: r.latestVideoUrl || '',
         latestDate: r.latestVideoDateText || '',
         status: r.status === 'active' ? 'Hoạt động' : 'Dừng hoạt động',
+        priority: r.priorityText || 'N/A',
         language: r.language || 'Unknown',
         subscribers: r.subscriberCount || 'N/A'
       });
@@ -195,6 +210,17 @@ app.post('/api/export/excel', async (req, res) => {
         statusCell.font = { color: { argb: 'FF00C853' }, bold: true };
       } else {
         statusCell.font = { color: { argb: 'FFFF1744' }, bold: true };
+      }
+
+      const priorityCell = row.getCell('priority');
+      if (r.priorityClass === 'priority-high') {
+        priorityCell.font = { color: { argb: 'FF00C853' }, bold: true };
+      } else if (r.priorityClass === 'priority-medium') {
+        priorityCell.font = { color: { argb: 'FFFF9100' }, bold: true };
+      } else if (r.priorityClass === 'priority-low') {
+        priorityCell.font = { color: { argb: 'FF00B0FF' }, bold: true };
+      } else if (r.priorityClass === 'priority-limited') {
+        priorityCell.font = { color: { argb: 'FF9E9E9E' }, bold: true };
       }
     });
 
