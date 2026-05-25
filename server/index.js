@@ -108,12 +108,10 @@ app.post('/api/export/csv', (req, res) => {
     'Tên kênh',
     'Channel ID',
     'Link kênh',
-    'Video #1',
-    'Video #2',
-    'Video #3',
-    'Thời gian #1',
-    'Thời gian #2',
-    'Thời gian #3',
+    'Tần suất đăng',
+    'Video mới nhất',
+    'Thời gian đăng mới nhất',
+    'Trạng thái',
     'Ngôn ngữ',
     'Subscribers'
   ];
@@ -126,12 +124,10 @@ app.post('/api/export/csv', (req, res) => {
       `"${(r.channelName || '').replace(/"/g, '""')}"`,
       r.channelId || '',
       r.channelLink || '',
-      r.videos?.[0]?.url || '',
-      r.videos?.[1]?.url || '',
-      r.videos?.[2]?.url || '',
-      `"${(r.videos?.[0]?.publishDate || '').replace(/"/g, '""')}"`,
-      `"${(r.videos?.[1]?.publishDate || '').replace(/"/g, '""')}"`,
-      `"${(r.videos?.[2]?.publishDate || '').replace(/"/g, '""')}"`,
+      `"${(r.frequencyText || '').replace(/"/g, '""')}"`,
+      r.latestVideoUrl || '',
+      `"${(r.latestVideoDateText || '').replace(/"/g, '""')}"`,
+      r.status === 'active' ? 'Hoạt động' : 'Dừng hoạt động',
       `"${(r.language || 'Unknown').replace(/"/g, '""')}"`,
       `"${(r.subscriberCount || 'N/A').replace(/"/g, '""')}"`
     ];
@@ -162,12 +158,10 @@ app.post('/api/export/excel', async (req, res) => {
       { header: 'Tên kênh', key: 'channelName', width: 25 },
       { header: 'Channel ID', key: 'channelId', width: 28 },
       { header: 'Link kênh', key: 'channelLink', width: 35 },
-      { header: 'Video gần nhất #1', key: 'video1', width: 40 },
-      { header: 'Video gần nhất #2', key: 'video2', width: 40 },
-      { header: 'Video gần nhất #3', key: 'video3', width: 40 },
-      { header: 'Thời gian đăng #1', key: 'time1', width: 20 },
-      { header: 'Thời gian đăng #2', key: 'time2', width: 20 },
-      { header: 'Thời gian đăng #3', key: 'time3', width: 20 },
+      { header: 'Tần suất đăng', key: 'frequency', width: 35 },
+      { header: 'Video mới nhất', key: 'latestVideo', width: 45 },
+      { header: 'Thời gian đăng', key: 'latestDate', width: 30 },
+      { header: 'Trạng thái', key: 'status', width: 20 },
       { header: 'Ngôn ngữ', key: 'language', width: 15 },
       { header: 'Subscribers', key: 'subscribers', width: 20 }
     ];
@@ -184,19 +178,24 @@ app.post('/api/export/excel', async (req, res) => {
 
     // Populate data rows
     results.forEach((r) => {
-      sheet.addRow({
+      const row = sheet.addRow({
         channelName: r.channelName || '',
         channelId: r.channelId || '',
         channelLink: r.channelLink || '',
-        video1: r.videos?.[0]?.url || '',
-        video2: r.videos?.[1]?.url || '',
-        video3: r.videos?.[2]?.url || '',
-        time1: r.videos?.[0]?.publishDate || '',
-        time2: r.videos?.[1]?.publishDate || '',
-        time3: r.videos?.[2]?.publishDate || '',
+        frequency: r.frequencyText || '',
+        latestVideo: r.latestVideoUrl || '',
+        latestDate: r.latestVideoDateText || '',
+        status: r.status === 'active' ? 'Hoạt động' : 'Dừng hoạt động',
         language: r.language || 'Unknown',
         subscribers: r.subscriberCount || 'N/A'
       });
+
+      const statusCell = row.getCell('status');
+      if (r.status === 'active') {
+        statusCell.font = { color: { argb: 'FF00C853' }, bold: true };
+      } else {
+        statusCell.font = { color: { argb: 'FFFF1744' }, bold: true };
+      }
     });
 
     res.setHeader(

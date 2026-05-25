@@ -4,6 +4,7 @@
  */
 
 const puppeteer = require('puppeteer');
+const https = require('https');
 const { detectLanguage } = require('./languageDetector');
 
 // Singleton browser instance
@@ -88,6 +89,105 @@ function normalizeChannelUrl(rawUrl) {
 }
 
 /**
+ * Helper: Fetch video page to extract exact publish date
+ */
+function fetchVideoDate(url) {
+  return new Promise((resolve) => {
+    https.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        const match = data.match(/<meta itemprop="datePublished" content="([^"]+)">/);
+        resolve(match ? match[1] : null);
+      });
+      res.on('error', () => resolve(null));
+    }).on('error', () => resolve(null));
+  });
+}
+
+/**
+ * Helper: Calculate frequency and status from videos array
+ */
+function calculateChannelMetrics(videos) {
+  if (!videos || videos.length === 0) {
+    return { frequencyText: 'N/A', latestVideoDateText: 'N/A', status: 'unknown' };
+  }
+
+  const validVideos = videos
+    .map(v => {
+      let timestamp = null;
+      if (v.exactDate) {
+        timestamp = new Date(v.exactDate).getTime();
+      }
+      // Fallback for "minutes ago" or "hours ago" -> Today
+      if (!timestamp && v.publishDate) {
+         if (/hour|giờ|時間|시간|час|stunde|hora|heure|minute|phút|分|분|минут|segundo|second|giây/i.test(v.publishDate)) {
+            timestamp = new Date().getTime(); // Today
+         }
+      }
+      return { ...v, timestamp };
+    })
+    .filter(v => v.timestamp !== null)
+    .sort((a, b) => b.timestamp - a.timestamp); // newest first
+
+  const N = validVideos.length;
+  if (N === 0) {
+    return { frequencyText: 'N/A', latestVideoDateText: videos[0].publishDate || 'N/A', status: 'active' };
+  }
+
+  const latestVideo = validVideos[0];
+  const now = new Date().getTime();
+  
+  const msInDay = 1000 * 60 * 60 * 24;
+  const latestDays = Math.max(0, (now - latestVideo.timestamp) / msInDay);
+
+  let frequencyText = 'N/A';
+  let status = 'active';
+  let avgGapDays = 0;
+
+  if (N >= 2) {
+    const oldestVideo = validVideos[N - 1];
+    const totalDaysGap = Math.max(0, (latestVideo.timestamp - oldestVideo.timestamp) / msInDay);
+    const gapsCount = N - 1;
+    
+    avgGapDays = totalDaysGap / gapsCount;
+    
+    if (avgGapDays > 0) {
+      const videosPerMonth = (30 / avgGapDays).toFixed(1);
+      frequencyText = `${videosPerMonth} video/tháng (~${avgGapDays.toFixed(1)} ngày/video)`;
+    } else {
+      frequencyText = `${N} video/tháng (trung bình <1 ngày/video)`;
+    }
+  } else {
+    frequencyText = 'N/A (Không đủ video)';
+  }
+
+  // Activity Status
+  if (N >= 2 && avgGapDays > 0) {
+    if (latestDays > 3 * avgGapDays) {
+      status = 'inactive';
+    } else {
+      status = 'active';
+    }
+  } else {
+    status = 'active';
+  }
+
+  let latestVideoDateText = latestVideo.exactDate || latestVideo.publishDate || 'N/A';
+  if (latestVideo.exactDate || latestDays === 0) {
+    latestVideoDateText += ` (~${Math.round(latestDays)} ngày trước)`;
+  }
+
+  return {
+    frequencyText,
+    latestVideoDateText,
+    status,
+    latestVideoUrl: videos[0].url || '',
+    latestVideoTitle: videos[0].title || ''
+  };
+}
+
+/**
  * Scrape a single YouTube channel.
  */
 async function scrapeChannel(channelUrl) {
@@ -101,20 +201,15 @@ async function scrapeChannel(channelUrl) {
     );
     await page.setViewport({ width: 1280, height: 800 });
 
-    // CRITICAL: Prevent YouTube from auto-translating video titles.
-    // Setting PREF cookie with 'hl=en' alone isn't enough — YouTube uses
-    // the auto-translate feature based on the user's language.
-    // We set cookies to disable auto-translation and request original titles.
     const targetUrl = normalizeChannelUrl(channelUrl);
     const domain = new URL(targetUrl).hostname;
 
     await page.setCookie({
       name: 'PREF',
-      value: 'f6=40000000&hl=en',  // f6=40000000 disables auto-translate
+      value: 'f6=40000000&hl=en',
       domain: '.' + domain.replace(/^www\./, ''),
       path: '/'
     });
-    // Also set CONSENT cookie to skip consent screen
     await page.setCookie({
       name: 'CONSENT',
       value: 'YES+cb',
@@ -126,7 +221,6 @@ async function scrapeChannel(channelUrl) {
 
     await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 45000 });
 
-    // Wait for video elements to load
     const videoSelectors = [
       'ytd-rich-item-renderer',
       'ytd-grid-video-renderer',
@@ -145,10 +239,8 @@ async function scrapeChannel(channelUrl) {
       console.warn('[Scraper] No video element selectors matched');
     }
 
-    // Wait for rendering
     await new Promise(r => setTimeout(r, 2000));
 
-    // Wait for channel header (subscriber count lives here)
     try {
       await page.waitForSelector('#subscriber-count, #channel-name, ytd-channel-name', { timeout: 8000 });
     } catch {
@@ -158,7 +250,6 @@ async function scrapeChannel(channelUrl) {
 
     // ---- Extract data ----
     const data = await page.evaluate(() => {
-      // --- Channel name ---
       let channelName = '';
       const nameSelectors = [
         'yt-dynamic-text-view-model h1',
@@ -175,7 +266,6 @@ async function scrapeChannel(channelUrl) {
         }
       }
 
-      // --- Subscriber count ---
       let subscriberCount = '';
       const subSelectors = [
         '#subscriber-count',
@@ -192,7 +282,6 @@ async function scrapeChannel(channelUrl) {
           break;
         }
       }
-      // Fallback: search text nodes for subscriber patterns
       if (!subscriberCount) {
         const subPattern = /[\d.,]+\s*[KMBTkm]?\s*(subscribers?|người đăng ký|abonnés?|Abonnenten?|подписчик\w*|登録者|구독자|iscritti|suscriptores?)/i;
         const allEls = document.querySelectorAll('yt-formatted-string, .yt-core-attributed-string, span');
@@ -204,7 +293,6 @@ async function scrapeChannel(channelUrl) {
           }
         }
       }
-      // Ultra-fallback: scan page text
       if (!subscriberCount) {
         const subLinePattern = /[\d.,]+\s*[KMBTkm]?\s*(subscribers?|người đăng ký|abonnés?|Abonnenten?|подписчик|登録者|구독자)/i;
         const pageText = document.body ? document.body.innerText : '';
@@ -218,31 +306,23 @@ async function scrapeChannel(channelUrl) {
         }
       }
 
-      // --- Channel description / tagline ---
-      // This text is NEVER auto-translated by YouTube, so it's the
-      // most reliable signal for language detection.
       let channelDescription = '';
       const descSelectors = [
-        // Tagline / short description visible on channel page
         '#channel-tagline yt-formatted-string',
         '#channel-tagline .yt-core-attributed-string',
         '#channel-tagline',
-        // Channel header description
         'yt-formatted-string#channel-header-tagline',
         '#channel-header ytd-channel-tagline-renderer yt-formatted-string',
         '#channel-header ytd-channel-tagline-renderer .yt-core-attributed-string',
-        // About snippet in header
         'ytd-channel-tagline-renderer #channel-tagline',
         'ytd-channel-tagline-renderer .yt-core-attributed-string',
         'ytd-channel-tagline-renderer',
-        // Meta description tag (always in original language)
         'meta[property="og:description"]',
         'meta[name="description"]'
       ];
       for (const sel of descSelectors) {
         const el = document.querySelector(sel);
         if (!el) continue;
-        // For meta tags, use content attribute
         if (sel.startsWith('meta[')) {
           const content = el.getAttribute('content') || '';
           if (content && content.length > 5) {
@@ -258,24 +338,20 @@ async function scrapeChannel(channelUrl) {
         }
       }
 
-      // --- Channel link ---
       let channelLink = window.location.href
         .split('?')[0]
         .replace(/\/(videos|shorts|streams|about|community|featured)\/?$/, '');
 
-      // --- Time regex ---
       const TIME_PATTERN = /(\d+\s*(second|minute|hour|day|week|month|year|giây|phút|giờ|ngày|tuần|tháng|năm|秒|分|時間|日|週間|ヶ月|年|초|분|시간|일|주|개월|년|секунд|минут|час|дн|недел|месяц|год|Sekunde|Minute|Stunde|Tag|Woche|Monat|Jahr|segundo|minuto|hora|día|semana|mes|año|seconde|heure|jour|semaine|mois|an)s?\s*(ago|trước|前|전|назад|her|hace|il y a|fa|geleden|sedan|temu|önce|lalu|yang lalu)?)|((streamed|Streamed|Premiered|premiered)\s+\d+\s*(second|minute|hour|day|week|month|year)s?\s*ago)/i;
 
-      // --- Videos ---
       const videos = [];
       const seen = new Set();
-
       const lockupItems = document.querySelectorAll(
         'yt-lockup-view-model, ytd-rich-item-renderer, ytd-grid-video-renderer'
       );
 
       for (const item of lockupItems) {
-        if (videos.length >= 3) break;
+        if (videos.length >= 20) break;
         const link = item.querySelector('a[href*="watch?v="]');
         if (!link) continue;
         let href = link.href || link.getAttribute('href');
@@ -288,7 +364,6 @@ async function scrapeChannel(channelUrl) {
 
         const url = 'https://www.youtube.com/watch?v=' + videoId;
 
-        // Title
         let title = '';
         const titleSels = ['a#video-title', '#video-title', 'a#video-title-link', 'h3 a', 'h3', '[id*="video-title"]'];
         for (const tSel of titleSels) {
@@ -299,7 +374,6 @@ async function scrapeChannel(channelUrl) {
         if (!title && link.textContent.trim()) title = link.textContent.trim();
         if (!title && link.getAttribute('aria-label')) title = link.getAttribute('aria-label');
 
-        // Publish date - scan all text elements
         let publishDate = '';
         const allTextEls = item.querySelectorAll(
           'span, .inline-metadata-item, #metadata-line span, ' +
@@ -314,7 +388,6 @@ async function scrapeChannel(channelUrl) {
             if (timeMatch) { publishDate = timeMatch[0].trim(); break; }
           }
         }
-        // Fallback: innerText of entire item
         if (!publishDate) {
           const innerText = item.innerText || '';
           const lines = innerText.split('\n');
@@ -330,11 +403,10 @@ async function scrapeChannel(channelUrl) {
         videos.push({ url, title, publishDate });
       }
 
-      // Fallback: generic link search
-      if (videos.length < 3) {
+      if (videos.length < 20) {
         const allLinks = document.querySelectorAll('a[href*="watch?v="]');
         for (const link of allLinks) {
-          if (videos.length >= 3) break;
+          if (videos.length >= 20) break;
           const href = link.href || link.getAttribute('href');
           const idMatch = href.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
           if (!idMatch) continue;
@@ -364,13 +436,11 @@ async function scrapeChannel(channelUrl) {
         }
       }
 
-      // --- Extract channel ID from URL (UC...) ---
       let channelId = '';
       const urlMatch = channelLink.match(/\/(UC[a-zA-Z0-9_-]{22})/);
       if (urlMatch) {
         channelId = urlMatch[1];
       }
-      // Also try from canonical link
       if (!channelId) {
         const canonical = document.querySelector('link[rel="canonical"]');
         if (canonical) {
@@ -379,13 +449,11 @@ async function scrapeChannel(channelUrl) {
         }
       }
 
-      // --- Page language from HTML lang attribute ---
       const htmlLang = document.documentElement.lang || '';
 
       return { channelName, channelLink, channelId, subscriberCount, channelDescription, videos, htmlLang };
     });
 
-    // Debug: if subscriber count still empty, try one more time
     if (!data.subscriberCount) {
       console.warn('[Scraper] Subscriber count not found for', data.channelName);
       const subFallback = await page.evaluate(() => {
@@ -420,29 +488,25 @@ async function scrapeChannel(channelUrl) {
       }
     }
 
-    // Language detection — multi-signal approach:
-    // Signal 1 (strongest): Channel description (NEVER auto-translated)
-    // Signal 2: Channel name (NEVER auto-translated)
-    // Signal 3: Video titles (may be auto-translated by YouTube)
+    // --- Fetch exact dates for all videos ---
+    console.log(`[Scraper] Fetching exact dates for ${data.videos.length} videos...`);
+    const fetchPromises = data.videos.map(async (v) => {
+      v.exactDate = await fetchVideoDate(v.url);
+    });
+    await Promise.all(fetchPromises);
+
+    // --- Language Detection ---
     const titles = data.videos.map(v => v.title).filter(Boolean);
     let lang;
 
-    // Build detection text prioritizing description (most reliable signal)
     const textsForDetection = [];
-
-    // Channel description — highest weight (repeat 3x)
-    // YouTube does NOT auto-translate channel descriptions/taglines
     if (data.channelDescription && data.channelDescription.length > 3) {
       for (let i = 0; i < 3; i++) textsForDetection.push(data.channelDescription);
       console.log('[Scraper] Channel desc:', data.channelDescription.substring(0, 80));
     }
-
-    // Channel name — high weight (repeat 3x)
     if (data.channelName) {
       for (let i = 0; i < 3; i++) textsForDetection.push(data.channelName);
     }
-
-    // Video titles — lowest weight (may be auto-translated)
     textsForDetection.push(...titles);
 
     lang = detectLanguage(textsForDetection);
@@ -454,9 +518,9 @@ async function scrapeChannel(channelUrl) {
       '| Videos:', data.videos.length,
       '| Lang:', lang.name
     );
-    if (titles.length > 0) {
-      console.log('[Scraper] Titles:', titles.map(t => t.substring(0, 50)).join(' | '));
-    }
+
+    // Calculate advanced metrics
+    const metrics = calculateChannelMetrics(data.videos);
 
     return {
       channelName: data.channelName,
@@ -465,7 +529,12 @@ async function scrapeChannel(channelUrl) {
       subscriberCount: data.subscriberCount,
       videos: data.videos,
       language: lang.name,
-      languageCode: lang.code
+      languageCode: lang.code,
+      frequencyText: metrics.frequencyText,
+      latestVideoDateText: metrics.latestVideoDateText,
+      status: metrics.status,
+      latestVideoUrl: metrics.latestVideoUrl,
+      latestVideoTitle: metrics.latestVideoTitle
     };
   } catch (err) {
     console.error('[Scraper] Error scraping ' + channelUrl + ':', err.message);

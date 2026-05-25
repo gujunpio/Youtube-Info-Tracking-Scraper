@@ -219,12 +219,14 @@ function addResultRow(result, index) {
     <td class="channel-name">${escapeHtml(result.channelName || 'N/A')}</td>
     <td class="channel-id">${escapeHtml(result.channelId || 'N/A')}</td>
     <td>${renderLink(result.channelLink)}</td>
-    <td>${renderVideoLink(v[0])}</td>
-    <td>${renderVideoLink(v[1])}</td>
-    <td>${renderVideoLink(v[2])}</td>
-    <td class="date-cell">${escapeHtml(v[0]?.publishDate || 'N/A')}</td>
-    <td class="date-cell">${escapeHtml(v[1]?.publishDate || 'N/A')}</td>
-    <td class="date-cell">${escapeHtml(v[2]?.publishDate || 'N/A')}</td>
+    <td class="freq-cell">${escapeHtml(result.frequencyText || 'N/A')}</td>
+    <td>${renderVideoLink({ url: result.latestVideoUrl, title: result.latestVideoTitle })}</td>
+    <td class="date-cell">${escapeHtml(result.latestVideoDateText || 'N/A')}</td>
+    <td class="status-cell">
+      <span class="status-badge ${result.status === 'active' ? 'status-active' : 'status-inactive'}">
+        ${result.status === 'active' ? 'Kênh đang hoạt động' : 'Kênh dừng hoạt động'}
+      </span>
+    </td>
     <td class="lang-cell"><span class="lang-badge">${escapeHtml(result.language || 'Unknown')}</span></td>
     <td class="subs-cell"><span class="subs-badge">${escapeHtml(result.subscriberCount || 'N/A')}</span></td>
   `;
