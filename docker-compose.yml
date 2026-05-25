@@ -1,0 +1,17 @@
+services:
+  youtube-scraper:
+    build: .
+    container_name: yt-channel-scraper
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    # Chromium needs shared memory for rendering
+    shm_size: '1gb'
+    security_opt:
+      - no-new-privileges:true
+    # Required for Chromium sandboxing inside Docker
+    cap_add:
+      - SYS_ADMIN

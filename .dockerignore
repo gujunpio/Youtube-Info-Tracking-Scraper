@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+README.md
+
+# Chrome extension files (not needed for webapp)
+manifest.json
+background.js
+content.js
+channel_button.js
+popup.html
+popup.js

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT Channel Scraper</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 500px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px 13px;
+      background: linear-gradient(135deg, #f8f9ff 0%, #eef1ff 100%);
+      border-bottom: 1px solid #e4e8f0;
+    }
+    .header-icon { font-size: 22px; }
+    .header-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: 0.2px;
+    }
+    .header-subtitle {
+      font-size: 11px;
+      color: #8a93a8;
+      margin-top: 1px;
+    }
+
+    /* ── Detected badge ── */
+    #detected-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      background: #f0f7ff;
+      border-bottom: 1px solid #cde3ff;
+      font-size: 12px;
+    }
+    #detected-banner .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #2196f3;
+      flex-shrink: 0;
+      box-shadow: 0 0 5px rgba(33,150,243,0.5);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    #detected-banner .detected-label { color: #8a93a8; }
+    #detected-banner .detected-url {
+      color: #1976d2;
+      font-weight: 600;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Warning banner ── */
+    #not-channel-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 18px;
+      background: #fffbf0;
+      border-bottom: 1px solid #ffe4a0;
+      font-size: 12px;
+      color: #b36000;
+    }
+
+    /* ── Body ── */
+    .body { padding: 16px 18px 20px; }
+
+    /* Options row */
+    .options-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .options-row label {
+      font-size: 13px;
+      color: #555;
+      font-weight: 500;
+    }
+    input[type="number"] {
+      width: 62px;
+      padding: 7px 8px;
+      border: 1.5px solid #dde2ed;
+      border-radius: 8px;
+      background: #f8f9fb;
+      color: #1a1a1a;
+      font-size: 13px;
+      font-family: inherit;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="number"]:focus {
+      border-color: #2196f3;
+      box-shadow: 0 0 0 3px rgba(33,150,243,0.12);
+    }
+    .options-hint { font-size: 11px; color: #aab; }
+
+    /* Scrape button */
+    #scrape-btn {
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2196f3 0%, #6c63ff 100%);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      box-shadow: 0 3px 12px rgba(33,150,243,0.28);
+      transition: filter 0.18s, transform 0.15s, box-shadow 0.15s;
+    }
+    #scrape-btn:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+      box-shadow: 0 5px 18px rgba(33,150,243,0.38);
+    }
+    #scrape-btn:active { transform: translateY(0); filter: brightness(0.96); }
+    #scrape-btn:disabled {
+      background: #e8ecf2;
+      color: #b0b8c8;
+      cursor: not-allowed;
+      box-shadow: none;
+      filter: none;
+      transform: none;
+    }
+
+    /* Status bar */
+    #status-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      margin-top: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    #status-bar.info  { background: #f0f7ff; border: 1px solid #cde3ff; color: #555; }
+    #status-bar.error { background: #fff0f0; border: 1px solid #ffcdd2; color: #c62828; }
+
+    .spinner-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      border: 2px solid #dde2ed;
+      border-top-color: #2196f3;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Divider */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 16px 0;
+      color: #c4cad8;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #eaedf4;
+    }
+
+    /* Manual URL input */
+    .input-group { display: flex; gap: 8px; }
+    input[type="text"] {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1.5px solid #dde2ed;
+      border-radius: 8px;
+      background: #f8f9fb;
+      color: #1a1a1a;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: #2196f3;
+      box-shadow: 0 0 0 3px rgba(33,150,243,0.12);
+    }
+    input[type="text"]::placeholder { color: #bcc2cf; }
+
+    /* Results */
+    #results-container { margin-top: 16px; display: none; }
+    .results-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #8a93a8;
+      margin-bottom: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      font-size: 12px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e4e8f0;
+    }
+    th, td {
+      border-bottom: 1px solid #e4e8f0;
+      padding: 7px 10px;
+      text-align: left;
+      word-break: break-all;
+      vertical-align: top;
+    }
+    th {
+      background: #f4f6fb;
+      color: #8a93a8;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #fafbfd; }
+    td a { color: #1976d2; text-decoration: none; }
+    td a:hover { text-decoration: underline; }
+    td.error-row { color: #c62828; }
+
+    #copy-btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2ecc71 0%, #1aab5a 100%);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(46,204,113,0.28);
+      transition: filter 0.18s, transform 0.15s;
+    }
+    #copy-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    #copy-btn:active { transform: translateY(0); }
+
+    /* Toast */
+    .toast {
+      visibility: hidden;
+      background: #1a1a1a;
+      color: #fff;
+      text-align: center;
+      border-radius: 20px;
+      padding: 7px 18px;
+      position: fixed;
+      z-index: 999;
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.25s, bottom 0.25s;
+      white-space: nowrap;
+    }
+    .toast.show { visibility: visible; opacity: 1; bottom: 24px; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">📊</div>
+    <div>
+      <div class="header-title">YT Channel Scraper</div>
+      <div class="header-subtitle">Lấy video phổ biến từ YouTube channel</div>
+    </div>
+  </div>
+
+  <!-- Auto-detected channel banner -->
+  <div id="detected-banner">
+    <div class="dot"></div>
+    <div class="detected-label">Detected:</div>
+    <div class="detected-url" id="detected-url-text"></div>
+  </div>
+
+  <!-- Not a channel page warning -->
+  <div id="not-channel-banner">
+    ⚠️ Mở một trang YouTube channel để tự động scrape, hoặc dán URL thủ công bên dưới.
+  </div>
+
+  <div class="body">
+
+    <!-- Options -->
+    <div class="options-row">
+      <label for="video-count">Số video cần lấy:</label>
+      <input type="number" id="video-count" min="1" max="10" value="3">
+      <span class="options-hint">(tối đa 10)</span>
+    </div>
+
+    <!-- Scrape button -->
+    <button id="scrape-btn">▶ Scrape Channel</button>
+
+    <!-- Status -->
+    <div id="status-bar">
+      <div class="spinner-dot" id="spinner"></div>
+      <span id="status-text"></span>
+    </div>
+
+    <!-- Manual URL fallback -->
+    <div class="divider">hoặc nhập thủ công</div>
+    <div class="input-group">
+      <input type="text" id="url-input" placeholder="https://youtube.com/@channel...">
+    </div>
+
+    <!-- Results -->
+    <div id="results-container">
+      <div class="results-label" style="margin-top:16px">Kết quả</div>
+      <table id="result-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Link</th>
+            <th>Videos</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+      <button id="copy-btn">📋 Copy TSV</button>
+    </div>
+
+  </div>
+
+  <div id="toast" class="toast">✅ Copied!</div>
+  <script src="popup.js"></script>
+</body>
+</html>

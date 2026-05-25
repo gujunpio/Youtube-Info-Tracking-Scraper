@@ -1,0 +1,16 @@
+{
+  "name": "yt-channel-scraper",
+  "version": "2.0.0",
+  "description": "YouTube Channel Scraper - Standalone Webapp",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "puppeteer": "^23.0.0",
+    "tinyld": "^1.3.4",
+    "exceljs": "^4.4.0"
+  }
+}
