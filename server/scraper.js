@@ -194,19 +194,27 @@ function calculateChannelMetrics(videos) {
     
     avgGapDays = totalDaysGap / gapsCount;
     
-    if (avgGapDays > 0) {
-      const videosPerMonth = (30 / avgGapDays).toFixed(1);
-      frequencyText = `${videosPerMonth} video/tháng (~${avgGapDays.toFixed(1)} ngày/video)`;
+    if (avgGapDays === 0) {
+      // Tránh chia cho 0 nếu các video có cùng timestamp
+      avgGapDays = 0.1; 
+    }
+
+    const videosPerMonth = Math.ceil(30 / avgGapDays);
+    
+    if (avgGapDays < 1) {
+      frequencyText = `${videosPerMonth} video/tháng (trung bình <1 ngày/video)`;
     } else {
-      frequencyText = `${N} video/tháng (trung bình <1 ngày/video)`;
+      frequencyText = `${videosPerMonth} video/tháng (~${avgGapDays.toFixed(1)} ngày/video)`;
     }
   } else {
     frequencyText = 'N/A (Không đủ video)';
   }
 
   // Activity Status
-  if (N >= 2 && avgGapDays > 0) {
-    if (latestDays > 3 * avgGapDays) {
+  if (N >= 2) {
+    // Đảm bảo kênh cần dừng ít nhất 3 ngày để coi là inactive nếu tần suất quá dày
+    const threshold = Math.max(avgGapDays * 3, 3); 
+    if (latestDays > threshold) {
       status = 'inactive';
     } else {
       status = 'active';
