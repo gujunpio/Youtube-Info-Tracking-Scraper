@@ -119,13 +119,16 @@ app.post('/api/export/csv', (req, res) => {
     'Tên kênh',
     'Channel ID',
     'Link kênh',
+    'Số video',
+    'Thời lượng TB',
+    'Lượt xem TB',
+    'Ngôn ngữ',
+    'Subscribers',
     'Tần suất đăng',
     'Video mới nhất',
     'Thời gian đăng mới nhất',
     'Trạng thái',
-    'Mức độ ưu tiên',
-    'Ngôn ngữ',
-    'Subscribers'
+    'Mức độ ưu tiên'
   ];
 
   // BOM for UTF-8 Excel compatibility
@@ -136,13 +139,16 @@ app.post('/api/export/csv', (req, res) => {
       `"${(r.channelName || '').replace(/"/g, '""')}"`,
       r.channelId || '',
       r.channelLink || '',
+      `"${(r.totalVideoCount || 'N/A').replace(/"/g, '""')}"`,
+      `"${(r.avgDurationText || 'N/A').replace(/"/g, '""')}"`,
+      `"${(r.avgViewsText || 'N/A').replace(/"/g, '""')}"`,
+      `"${(r.language || 'Unknown').replace(/"/g, '""')}"`,
+      `"${(r.subscriberCount || 'N/A').replace(/"/g, '""')}"`,
       `"${(r.frequencyText || '').replace(/"/g, '""')}"`,
       r.latestVideoUrl || '',
       `"${(r.latestVideoDateText || '').replace(/"/g, '""')}"`,
       r.status === 'active' ? 'Hoạt động' : 'Dừng hoạt động',
-      `"${(r.priorityText || 'N/A').replace(/"/g, '""')}"`,
-      `"${(r.language || 'Unknown').replace(/"/g, '""')}"`,
-      `"${(r.subscriberCount || 'N/A').replace(/"/g, '""')}"`
+      `"${(r.priorityText || 'N/A').replace(/"/g, '""')}"`
     ];
     csv += row.join(',') + '\n';
   });
@@ -171,13 +177,16 @@ app.post('/api/export/excel', async (req, res) => {
       { header: 'Tên kênh', key: 'channelName', width: 25 },
       { header: 'Channel ID', key: 'channelId', width: 28 },
       { header: 'Link kênh', key: 'channelLink', width: 35 },
+      { header: 'Số video', key: 'totalVideoCount', width: 15 },
+      { header: 'Thời lượng TB', key: 'avgDuration', width: 15 },
+      { header: 'Lượt xem TB', key: 'avgViews', width: 15 },
+      { header: 'Ngôn ngữ', key: 'language', width: 15 },
+      { header: 'Subscribers', key: 'subscribers', width: 20 },
       { header: 'Tần suất đăng', key: 'frequency', width: 35 },
       { header: 'Video mới nhất', key: 'latestVideo', width: 45 },
       { header: 'Thời gian đăng', key: 'latestDate', width: 30 },
       { header: 'Trạng thái', key: 'status', width: 20 },
-      { header: 'Mức độ ưu tiên', key: 'priority', width: 25 },
-      { header: 'Ngôn ngữ', key: 'language', width: 15 },
-      { header: 'Subscribers', key: 'subscribers', width: 20 }
+      { header: 'Mức độ ưu tiên', key: 'priority', width: 25 }
     ];
 
     // Style the header row
@@ -196,13 +205,16 @@ app.post('/api/export/excel', async (req, res) => {
         channelName: r.channelName || '',
         channelId: r.channelId || '',
         channelLink: r.channelLink || '',
+        totalVideoCount: r.totalVideoCount || 'N/A',
+        avgDuration: r.avgDurationText || 'N/A',
+        avgViews: r.avgViewsText || 'N/A',
+        language: r.language || 'Unknown',
+        subscribers: r.subscriberCount || 'N/A',
         frequency: r.frequencyText || '',
         latestVideo: r.latestVideoUrl || '',
         latestDate: r.latestVideoDateText || '',
         status: r.status === 'active' ? 'Hoạt động' : 'Dừng hoạt động',
-        priority: r.priorityText || 'N/A',
-        language: r.language || 'Unknown',
-        subscribers: r.subscriberCount || 'N/A'
+        priority: r.priorityText || 'N/A'
       });
 
       const statusCell = row.getCell('status');

@@ -220,21 +220,24 @@ function addResultRow(result, index) {
     <td class="channel-name">${escapeHtml(result.channelName || 'N/A')}</td>
     <td class="channel-id">${escapeHtml(result.channelId || 'N/A')}</td>
     <td>${renderLink(result.channelLink)}</td>
+    <td class="vcount-cell"><span class="vcount-badge">${escapeHtml(result.totalVideoCount || 'N/A')}</span></td>
+    <td class="duration-cell"><span class="duration-badge">${escapeHtml(result.avgDurationText || 'N/A')}</span></td>
+    <td class="avgviews-cell"><span class="avgviews-badge">${escapeHtml(result.avgViewsText || 'N/A')}</span></td>
+    <td class="lang-cell"><span class="lang-badge">${escapeHtml(result.language || 'Unknown')}</span></td>
+    <td class="subs-cell"><span class="subs-badge">${escapeHtml(result.subscriberCount || 'N/A')}</span></td>
     <td class="freq-cell">${escapeHtml(result.frequencyText || 'N/A')}</td>
-    <td>${renderVideoLink({ url: result.latestVideoUrl, title: result.latestVideoTitle })}</td>
-    <td class="date-cell">${escapeHtml(result.latestVideoDateText || 'N/A')}</td>
-    <td class="status-cell">
+    <td class="temp-cell">${renderVideoLink({ url: result.latestVideoUrl, title: result.latestVideoTitle })}</td>
+    <td class="date-cell temp-cell">${escapeHtml(result.latestVideoDateText || 'N/A')}</td>
+    <td class="status-cell temp-cell">
       <span class="status-badge ${result.status === 'active' ? 'status-active' : 'status-inactive'}">
         ${result.status === 'active' ? 'Kênh đang hoạt động' : 'Kênh dừng hoạt động'}
       </span>
     </td>
-    <td class="priority-cell">
+    <td class="priority-cell temp-cell">
       <span class="priority-badge ${result.priorityClass || ''}">
         ${escapeHtml(result.priorityText || 'N/A')}
       </span>
     </td>
-    <td class="lang-cell"><span class="lang-badge">${escapeHtml(result.language || 'Unknown')}</span></td>
-    <td class="subs-cell"><span class="subs-badge">${escapeHtml(result.subscriberCount || 'N/A')}</span></td>
   `;
 
   resultsBody.appendChild(tr);

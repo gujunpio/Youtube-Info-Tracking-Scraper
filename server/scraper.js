@@ -128,6 +128,77 @@ function parseSubscribers(subText) {
 }
 
 /**
+ * Helper: Parse duration string ("12:34" or "1:05:23") into seconds
+ */
+function parseDuration(durationStr) {
+  if (!durationStr) return 0;
+  const cleaned = durationStr.trim();
+  const parts = cleaned.split(':').map(Number);
+  if (parts.some(isNaN)) return 0;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 1) return parts[0];
+  return 0;
+}
+
+/**
+ * Helper: Format seconds into MM:SS or H:MM:SS
+ */
+function formatDuration(totalSeconds) {
+  if (!totalSeconds || totalSeconds <= 0) return 'N/A';
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.round(totalSeconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/**
+ * Helper: Parse view count text into number
+ * e.g. "1.2M views" → 1200000, "45K views" → 45000, "123,456 views" → 123456
+ */
+function parseViewCount(viewText) {
+  if (!viewText) return 0;
+  // Extract the numeric part with optional K/M/B suffix
+  const match = viewText.match(/([\d.,]+)\s*([KMBkmb]?)/);
+  if (!match) return 0;
+  let num = parseFloat(match[1].replace(/,/g, ''));
+  const unit = match[2].toUpperCase();
+  if (unit === 'K') num *= 1000;
+  else if (unit === 'M') num *= 1000000;
+  else if (unit === 'B') num *= 1000000000;
+  return Math.round(num);
+}
+
+/**
+ * Helper: Format view count for display
+ * e.g. 1200000 → "1.2M", 45000 → "45K", 890 → "890"
+ */
+function formatViewCount(views) {
+  if (!views || views <= 0) return 'N/A';
+  if (views >= 1000000000) return (views / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+  if (views >= 1000000) return (views / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (views >= 1000) return (views / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return views.toString();
+}
+
+/**
+ * Helper: Parse total video count text
+ * e.g. "390 videos" → 390, "1.2K videos" → 1200
+ */
+function parseTotalVideoCount(text) {
+  if (!text) return 0;
+  const match = text.match(/([\d.,]+)\s*([KMBkmb]?)/);
+  if (!match) return 0;
+  let num = parseFloat(match[1].replace(/,/g, ''));
+  const unit = match[2].toUpperCase();
+  if (unit === 'K') num *= 1000;
+  else if (unit === 'M') num *= 1000000;
+  else if (unit === 'B') num *= 1000000000;
+  return Math.round(num);
+}
+
+/**
  * Helper: Calculate frequency and status from videos array
  */
 function calculateChannelMetrics(videos) {
@@ -392,6 +463,38 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
         .split('?')[0]
         .replace(/\/(videos|shorts|streams|about|community|featured)\/?$/, '');
 
+      // ── Total Video Count ─────────────────────────────────────────────
+      let totalVideoCountText = '';
+      // Strategy 1: Look for "XXX videos" pattern in channel header area
+      const headerMeta = document.querySelectorAll(
+        '#channel-header yt-formatted-string, ' +
+        '#channel-header-container yt-formatted-string, ' +
+        'yt-content-metadata-view-model span, ' +
+        '#inner-header-container yt-formatted-string, ' +
+        '.yt-content-metadata-view-model-wiz__metadata-text span, ' +
+        '.yt-content-metadata-view-model-wiz__metadata-text'
+      );
+      const videoCountPattern = /[\d.,]+[KMBkmb]?\s*(videos?|video)/i;
+      for (const el of headerMeta) {
+        const text = el.textContent.trim();
+        if (text && text.length < 40 && videoCountPattern.test(text)) {
+          totalVideoCountText = text;
+          break;
+        }
+      }
+      // Strategy 2: Scan page text for "XXX videos" near subscriber info
+      if (!totalVideoCountText) {
+        const pageText = document.body ? document.body.innerText : '';
+        const lines = pageText.split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed && trimmed.length < 40 && videoCountPattern.test(trimmed)) {
+            totalVideoCountText = trimmed;
+            break;
+          }
+        }
+      }
+
       const TIME_PATTERN = /(\d+\s*(second|minute|hour|day|week|month|year|giây|phút|giờ|ngày|tuần|tháng|năm|秒|分|時間|日|週間|ヶ月|年|초|분|시간|일|주|개월|년|секунд|минут|час|дн|недел|месяц|год|Sekunde|Minute|Stunde|Tag|Woche|Monat|Jahr|segundo|minuto|hora|día|semana|mes|año|seconde|heure|jour|semaine|mois|an)s?\s*(ago|trước|前|전|назад|her|hace|il y a|fa|geleden|sedan|temu|önce|lalu|yang lalu)?)|((streamed|Streamed|Premiered|premiered)\s+\d+\s*(second|minute|hour|day|week|month|year)s?\s*ago)/i;
 
       const videos = [];
@@ -424,13 +527,108 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
         if (!title && link.textContent.trim()) title = link.textContent.trim();
         if (!title && link.getAttribute('aria-label')) title = link.getAttribute('aria-label');
 
-        let publishDate = '';
+        // ── Duration from thumbnail overlay ────────────────────────────
+        let duration = '';
+        // Strategy 1: Direct selectors for time overlay
+        const durationSels = [
+          'ytd-thumbnail-overlay-time-status-renderer #text',
+          'ytd-thumbnail-overlay-time-status-renderer span',
+          'ytd-thumbnail-overlay-time-status-renderer',
+          '.badge-shape-wiz--thumbnail-overlay .badge-shape-wiz__text',
+          '.badge-shape-wiz--thumbnail-overlay',
+          '[overlay-style="DEFAULT"] #text',
+          '[overlay-style="DEFAULT"]'
+        ];
+        const DURATION_RE = /\b(\d{1,3}:\d{2}(?::\d{2})?)\b/;
+        for (const dSel of durationSels) {
+          const dEl = item.querySelector(dSel);
+          if (dEl) {
+            const dText = (dEl.textContent || '').trim();
+            const dMatch = dText.match(DURATION_RE);
+            if (dMatch) {
+              duration = dMatch[1];
+              break;
+            }
+          }
+        }
+        // Strategy 2: aria-label on time status renderer (e.g. "12 minutes, 34 seconds")
+        if (!duration) {
+          const ariaEl = item.querySelector(
+            'ytd-thumbnail-overlay-time-status-renderer[aria-label], ' +
+            '[overlay-style="DEFAULT"][aria-label]'
+          );
+          if (ariaEl) {
+            const label = ariaEl.getAttribute('aria-label') || '';
+            const hrs  = label.match(/(\d+)\s*hour/i);
+            const mins = label.match(/(\d+)\s*minute/i);
+            const secs = label.match(/(\d+)\s*second/i);
+            let totalSec = 0;
+            if (hrs)  totalSec += parseInt(hrs[1])  * 3600;
+            if (mins) totalSec += parseInt(mins[1]) * 60;
+            if (secs) totalSec += parseInt(secs[1]);
+            if (totalSec > 0) {
+              const h = Math.floor(totalSec / 3600);
+              const m = Math.floor((totalSec % 3600) / 60);
+              const s = totalSec % 60;
+              duration = h > 0
+                ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+                : `${m}:${String(s).padStart(2, '0')}`;
+            }
+          }
+        }
+        // Strategy 3: Scan thumbnail area for any time-like text
+        if (!duration) {
+          const thumbArea = item.querySelector('ytd-thumbnail, #thumbnail, a#thumbnail');
+          if (thumbArea) {
+            const thumbText = (thumbArea.innerText || thumbArea.textContent || '').trim();
+            const tMatch = thumbText.match(DURATION_RE);
+            if (tMatch) duration = tMatch[1];
+          }
+        }
+        // Strategy 4: Scan full item text for time pattern (last resort)
+        if (!duration) {
+          const fullText = item.innerText || '';
+          const lines = fullText.split('\n');
+          for (const line of lines) {
+            const t = line.trim();
+            // Only match short lines that look like a pure duration
+            if (t && t.length <= 10 && DURATION_RE.test(t)) {
+              const m = t.match(DURATION_RE);
+              if (m) { duration = m[1]; break; }
+            }
+          }
+        }
+
+        // ── View count from metadata ───────────────────────────────────
+        let viewCountText = '';
+        const VIEW_PATTERN = /([\d.,]+[KMBkmb]?)\s*(views?|lượt xem|Aufrufe|vues?|visualizzazioni|reproducci|просмотр|再生|조회|次觀看|次观看)/i;
         const allTextEls = item.querySelectorAll(
           'span, .inline-metadata-item, #metadata-line span, ' +
           '#metadata-line yt-formatted-string, yt-formatted-string, ' +
           '.yt-lockup-metadata-view-model-wiz__metadata span, ' +
           '.yt-lockup-metadata-view-model-wiz__metadata div'
         );
+        for (const el of allTextEls) {
+          const text = el.textContent.trim();
+          if (text && text.length < 80 && VIEW_PATTERN.test(text)) {
+            const vMatch = text.match(VIEW_PATTERN);
+            if (vMatch) { viewCountText = vMatch[1].trim(); break; }
+          }
+        }
+        if (!viewCountText) {
+          const innerText = item.innerText || '';
+          const lines = innerText.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed && trimmed.length < 80 && VIEW_PATTERN.test(trimmed)) {
+              const vMatch = trimmed.match(VIEW_PATTERN);
+              if (vMatch) { viewCountText = vMatch[1].trim(); break; }
+            }
+          }
+        }
+
+        // ── Publish date ───────────────────────────────────────────────
+        let publishDate = '';
         for (const el of allTextEls) {
           const text = el.textContent.trim();
           if (text && text.length < 80 && TIME_PATTERN.test(text)) {
@@ -450,7 +648,7 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
           }
         }
 
-        videos.push({ url, title, publishDate });
+        videos.push({ url, title, publishDate, duration, viewCountText });
       }
 
       if (videos.length < 20) {
@@ -465,15 +663,27 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
           seen.add(videoId);
 
           let publishDate = '';
+          let duration = '';
+          let viewCountText = '';
           const parent = link.closest('ytd-rich-item-renderer, ytd-grid-video-renderer, yt-lockup-view-model');
           if (parent) {
             const innerText = parent.innerText || '';
             const lines = innerText.split('\n');
+            const DURATION_RE_FB = /\b(\d{1,3}:\d{2}(?::\d{2})?)\b/;
+            const VIEW_PATTERN_FB = /([\d.,]+[KMBkmb]?)\s*(views?|lượt xem|Aufrufe|vues?|visualizzazioni|reproducci|просмотр|再生|조회|次觀看|次观看)/i;
             for (const line of lines) {
               const trimmed = line.trim();
-              if (trimmed && trimmed.length < 80 && TIME_PATTERN.test(trimmed)) {
+              if (!publishDate && trimmed && trimmed.length < 80 && TIME_PATTERN.test(trimmed)) {
                 const timeMatch = trimmed.match(TIME_PATTERN);
-                if (timeMatch) { publishDate = timeMatch[0].trim(); break; }
+                if (timeMatch) publishDate = timeMatch[0].trim();
+              }
+              if (!duration && trimmed && trimmed.length <= 10 && DURATION_RE_FB.test(trimmed)) {
+                const dMatch = trimmed.match(DURATION_RE_FB);
+                if (dMatch) duration = dMatch[1];
+              }
+              if (!viewCountText && trimmed && trimmed.length < 80 && VIEW_PATTERN_FB.test(trimmed)) {
+                const vMatch = trimmed.match(VIEW_PATTERN_FB);
+                if (vMatch) viewCountText = vMatch[1].trim();
               }
             }
           }
@@ -481,7 +691,9 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
           videos.push({
             url: 'https://www.youtube.com/watch?v=' + videoId,
             title: link.title || link.textContent.trim() || '',
-            publishDate
+            publishDate,
+            duration,
+            viewCountText
           });
         }
       }
@@ -501,7 +713,11 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
 
       const htmlLang = document.documentElement.lang || '';
 
-      return { channelName, channelLink, channelId, subscriberCount, channelDescription, videos, htmlLang };
+      // Debug: log duration/views per video
+      const debugInfo = videos.map((v, i) => `  [${i}] dur=${v.duration || 'MISS'} views=${v.viewCountText || 'MISS'}`);
+      console.log('[Scraper-Debug] Video metrics:\n' + debugInfo.join('\n'));
+
+      return { channelName, channelLink, channelId, subscriberCount, channelDescription, videos, htmlLang, totalVideoCountText };
     });
 
     // Check duplicate channel ID early to avoid fetching 20 video dates
@@ -566,11 +782,36 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
 
     lang = detectLanguage(textsForDetection);
 
+    // ── Calculate video count, avg duration, avg views ──────────────
+    const totalVideoCount = parseTotalVideoCount(data.totalVideoCountText);
+    const totalVideoCountDisplay = totalVideoCount > 0 ? totalVideoCount.toLocaleString() : (data.totalVideoCountText || 'N/A');
+
+    // Average duration from up to 20 videos
+    const durationsInSeconds = data.videos
+      .map(v => parseDuration(v.duration))
+      .filter(d => d > 0);
+    const avgDurationSeconds = durationsInSeconds.length > 0
+      ? durationsInSeconds.reduce((a, b) => a + b, 0) / durationsInSeconds.length
+      : 0;
+    const avgDurationText = formatDuration(avgDurationSeconds);
+
+    // Average views from up to 20 videos
+    const viewCounts = data.videos
+      .map(v => parseViewCount(v.viewCountText))
+      .filter(v => v > 0);
+    const avgViews = viewCounts.length > 0
+      ? Math.round(viewCounts.reduce((a, b) => a + b, 0) / viewCounts.length)
+      : 0;
+    const avgViewsText = formatViewCount(avgViews);
+
     console.log(
       '[Scraper] Done - Channel:', data.channelName,
       '| ID:', data.channelId || 'N/A',
       '| Subs:', data.subscriberCount || 'N/A',
-      '| Videos:', data.videos.length,
+      '| Total Videos:', totalVideoCountDisplay,
+      '| Avg Duration:', avgDurationText,
+      '| Avg Views:', avgViewsText,
+      '| Videos scraped:', data.videos.length,
       '| Lang:', lang.name
     );
 
@@ -601,6 +842,11 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
       channelLink: data.channelLink,
       channelId: data.channelId,
       subscriberCount: data.subscriberCount,
+      totalVideoCount: totalVideoCountDisplay,
+      avgDurationSeconds,
+      avgDurationText,
+      avgViews,
+      avgViewsText,
       videos: data.videos,
       language: lang.name,
       languageCode: lang.code,

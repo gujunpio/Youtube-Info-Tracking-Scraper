@@ -476,7 +476,7 @@ body {
 .results-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1400px;
+  min-width: 1800px;
   font-size: 0.82rem;
 }
 
@@ -627,6 +627,80 @@ body {
   color: #ff6b8a;
   border-radius: 100px;
   border: 1px solid rgba(255, 8, 68, 0.2);
+}
+
+/* ── New metric badges ── */
+.col-vcount {
+  min-width: 90px;
+}
+
+.col-duration {
+  min-width: 110px;
+}
+
+.col-avgviews {
+  min-width: 110px;
+}
+
+.vcount-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(0, 200, 83, 0.12);
+  color: #69f0ae;
+  border-radius: 100px;
+  border: 1px solid rgba(0, 200, 83, 0.2);
+}
+
+.duration-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  letter-spacing: 0.5px;
+  background: rgba(255, 152, 0, 0.12);
+  color: #ffb74d;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 152, 0, 0.2);
+}
+
+.avgviews-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: rgba(33, 150, 243, 0.12);
+  color: #64b5f6;
+  border-radius: 100px;
+  border: 1px solid rgba(33, 150, 243, 0.2);
+}
+
+/* ── Temporary / secondary columns (last 4) ── */
+.col-temp {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.col-temp::after {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08)) !important;
+  opacity: 0.3 !important;
+}
+
+.temp-cell {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.results-table tbody tr:nth-child(even) .temp-cell {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.results-table tbody tr:hover .temp-cell {
+  background: rgba(255, 255, 255, 0.10);
 }
 
 /* ============================================================
@@ -983,4 +1057,32 @@ body.light-mode .theme-toggle {
 }
 body.light-mode .theme-toggle:hover {
   background: #f1f5f9;
+}
+body.light-mode .vcount-badge {
+  background: rgba(0, 150, 60, 0.1);
+  color: #2e7d32;
+  border-color: rgba(0, 150, 60, 0.2);
+}
+body.light-mode .duration-badge {
+  background: rgba(230, 126, 0, 0.1);
+  color: #e65100;
+  border-color: rgba(230, 126, 0, 0.2);
+}
+body.light-mode .avgviews-badge {
+  background: rgba(21, 101, 192, 0.1);
+  color: #1565c0;
+  border-color: rgba(21, 101, 192, 0.2);
+}
+body.light-mode .temp-cell {
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--text-secondary);
+}
+body.light-mode .col-temp {
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+body.light-mode .results-table tbody tr:nth-child(even) .temp-cell {
+  background: rgba(0, 0, 0, 0.035);
+}
+body.light-mode .results-table tbody tr:hover .temp-cell {
+  background: rgba(0, 0, 0, 0.06);
 }
