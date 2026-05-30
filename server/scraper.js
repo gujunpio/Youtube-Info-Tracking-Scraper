@@ -159,11 +159,13 @@ function formatDuration(totalSeconds) {
  */
 function parseViewCount(viewText) {
   if (!viewText) return 0;
-  // Extract the numeric part with optional K/M/B suffix
-  const match = viewText.match(/([\d.,]+)\s*([KMBkmb]?)/);
+  // Normalize: remove spaces between number and suffix (e.g. "1.2 M" -> "1.2M")
+  const normalized = viewText.replace(/\s/g, '');
+  const match = normalized.match(/([\d.,]+)([KMBkmb]?)/);
   if (!match) return 0;
   let num = parseFloat(match[1].replace(/,/g, ''));
-  const unit = match[2].toUpperCase();
+  if (isNaN(num) || num <= 0) return 0;
+  const unit = (match[2] || '').toUpperCase();
   if (unit === 'K') num *= 1000;
   else if (unit === 'M') num *= 1000000;
   else if (unit === 'B') num *= 1000000000;
@@ -601,7 +603,7 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
 
         // ── View count from metadata ───────────────────────────────────
         let viewCountText = '';
-        const VIEW_PATTERN = /([\d.,]+[KMBkmb]?)\s*(views?|lượt xem|Aufrufe|vues?|visualizzazioni|reproducci|просмотр|再生|조회|次觀看|次观看)/i;
+        const VIEW_PATTERN = /([\d.,]+\s*[KMBkmb]?)\s*(views?|lượt xem|Aufrufe|vues?|visualizzazioni|reproducci|просмотр|再生|조회|次觀看|次观看)/i;
         const allTextEls = item.querySelectorAll(
           'span, .inline-metadata-item, #metadata-line span, ' +
           '#metadata-line yt-formatted-string, yt-formatted-string, ' +
@@ -612,9 +614,16 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
           const text = el.textContent.trim();
           if (text && text.length < 80 && VIEW_PATTERN.test(text)) {
             const vMatch = text.match(VIEW_PATTERN);
-            if (vMatch) { viewCountText = vMatch[1].trim(); break; }
+            if (vMatch) { viewCountText = vMatch[1].replace(/\s/g, '').trim(); break; }
           }
         }
+        // Fallback: aria-label on the item (e.g. "Video title, 1.2M views, 3 days ago")
+        if (!viewCountText) {
+          const ariaLabel = item.getAttribute('aria-label') || '';
+          const ariaMatch = ariaLabel.match(/([\d.,]+\s*[KMBkmb]?)\s*(views?|lượt xem)/i);
+          if (ariaMatch) viewCountText = ariaMatch[1].replace(/\s/g, '').trim();
+        }
+        // Fallback: scan entire item innerText
         if (!viewCountText) {
           const innerText = item.innerText || '';
           const lines = innerText.split('\n');
@@ -622,7 +631,7 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
             const trimmed = line.trim();
             if (trimmed && trimmed.length < 80 && VIEW_PATTERN.test(trimmed)) {
               const vMatch = trimmed.match(VIEW_PATTERN);
-              if (vMatch) { viewCountText = vMatch[1].trim(); break; }
+              if (vMatch) { viewCountText = vMatch[1].replace(/\s/g, '').trim(); break; }
             }
           }
         }

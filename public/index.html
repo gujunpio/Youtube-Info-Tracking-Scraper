@@ -18,10 +18,12 @@
 
   <!-- ===== HEADER ===== -->
   <header class="header">
-    <button id="theme-toggle" class="theme-toggle" title="Chuyển chế độ Sáng/Tối">☀️</button>
+    <button id="theme-toggle" class="theme-toggle" title="Chuyển chế độ Sáng/Tối"></button>
     <div class="header-inner">
       <div class="logo-area">
-        <span class="logo-icon">▶️</span>
+        <span class="logo-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="#60a5fa" stroke="none"/></svg>
+        </span>
         <h1 class="logo-text">YT Channel Scraper</h1>
       </div>
       <p class="subtitle">Scrape thông tin kênh YouTube nhanh chóng</p>
@@ -67,7 +69,7 @@
     <!-- ── Progress Section ── -->
     <section id="progressSection" class="card progress-card" style="display: none;">
       <div class="card-header">
-        <h2 class="card-title">⏳ Đang xử lý</h2>
+        <h2 id="progressTitle" class="card-title">⏳ Đang xử lý</h2>
         <span id="progressCounter" class="progress-counter">0/0 kênh</span>
       </div>
 
