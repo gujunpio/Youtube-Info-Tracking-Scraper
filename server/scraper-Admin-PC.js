@@ -73,6 +73,8 @@ async function closeBrowser() {
  */
 function normalizeChannelUrl(rawUrl) {
   let url = rawUrl.trim();
+  // Decode percent-encoded Unicode characters (e.g. %EC%9D%80 → 은)
+  try { url = decodeURIComponent(url); } catch { /* keep original if malformed */ }
   if (!url.startsWith('http')) url = 'https://' + url;
   try {
     const parsed = new URL(url);
@@ -117,13 +119,18 @@ function fetchVideoDate(url) {
  */
 function parseSubscribers(subText) {
   if (!subText) return 0;
-  const match = subText.match(/([\d.,]+)\s*([KMBTkmbt]?)/);
+  // Handle Vietnamese abbreviations: N (nghìn=K), Tr (triệu=M), T (tỷ=B)
+  // Handle Spanish: mil (K), millones/M, B
+  // Handle standard: K, M, B, T
+  const match = subText.match(/([\d.,]+)\s*(Tr|N|mil|[KMBTkmbt]?)/i);
   if (!match) return 0;
-  let num = parseFloat(match[1].replace(/,/g, ''));
-  const unit = match[2].toUpperCase();
-  if (unit === 'K') num *= 1000;
-  else if (unit === 'M') num *= 1000000;
-  else if (unit === 'B') num *= 1000000000;
+  let num = parseFloat(match[1].replace(/,/g, '.').replace(/\.(?=.*\.)/g, ''));
+  if (isNaN(num)) return 0;
+  const unit = match[2];
+  const unitLower = unit.toLowerCase();
+  if (unitLower === 'k' || unitLower === 'n' || unitLower === 'mil') num *= 1000;
+  else if (unitLower === 'm' || unitLower === 'tr') num *= 1000000;
+  else if (unitLower === 'b' || unitLower === 't') num *= 1000000000;
   return num;
 }
 
@@ -322,12 +329,19 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
     );
     await page.setViewport({ width: 1280, height: 800 });
 
+    // Set Accept-Language to wildcard so YouTube doesn't auto-translate titles
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': '*'
+    });
+
     const targetUrl = normalizeChannelUrl(channelUrl);
     const domain = new URL(targetUrl).hostname;
 
+    // NOTE: Do NOT set hl=en in PREF — that forces YouTube to auto-translate
+    // video titles to English, destroying the original language signal.
     await page.setCookie({
       name: 'PREF',
-      value: 'f6=40000000&hl=en',
+      value: 'f6=40000000',
       domain: '.' + domain.replace(/^www\./, ''),
       path: '/'
     });
@@ -404,23 +418,23 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
         }
       }
       if (!subscriberCount) {
-        const subPattern = /[\d.,]+\s*[KMBTkm]?\s*(subscribers?|người đăng ký|abonnés?|Abonnenten?|подписчик\w*|登録者|구독자|iscritti|suscriptores?)/i;
+        const subPattern = /[\d.,]+\s*(?:Tr|N|mil|[KMBTkm])?\s*(subscribers?|người đăng ký|abonnés?|Abonnenten?|подписчик\w*|登録者|구독자|iscritti|suscriptores?|abonados?)/i;
         const allEls = document.querySelectorAll('yt-formatted-string, .yt-core-attributed-string, span');
         for (const el of allEls) {
           const text = el.textContent.trim();
-          if (text && text.length < 60 && subPattern.test(text)) {
+          if (text && text.length < 60 && /\d/.test(text) && subPattern.test(text)) {
             subscriberCount = text;
             break;
           }
         }
       }
       if (!subscriberCount) {
-        const subLinePattern = /[\d.,]+\s*[KMBTkm]?\s*(subscribers?|người đăng ký|abonnés?|Abonnenten?|подписчик|登録者|구독자)/i;
+        const subLinePattern = /[\d.,]+\s*(?:Tr|N|mil|[KMBTkm])?\s*(subscribers?|người đăng ký|abonnés?|Abonnenten?|подписчик|登録者|구독자|suscriptores?|abonados?)/i;
         const pageText = document.body ? document.body.innerText : '';
         const lines = pageText.split('\n');
         for (const line of lines) {
           const trimmed = line.trim();
-          if (trimmed && trimmed.length < 60 && subLinePattern.test(trimmed)) {
+          if (trimmed && trimmed.length < 60 && /\d/.test(trimmed) && subLinePattern.test(trimmed)) {
             subscriberCount = trimmed;
             break;
           }
@@ -738,7 +752,8 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) {
           const text = walker.currentNode.textContent.trim();
-          if (text && text.length < 80 && /subscri|đăng ký/i.test(text)) {
+          // MUST contain a digit AND a subscriber keyword
+          if (text && text.length < 80 && /\d/.test(text) && /subscri|người đăng ký|abonné|Abonnent|подписчик|登録者|구독자|suscriptor|abonado/i.test(text)) {
             matches.push(text);
             if (matches.length >= 5) break;
           }
@@ -753,8 +768,11 @@ async function scrapeChannel(channelUrl, seenIds = new Set()) {
           data.subscriberCount = subFallback.text;
           console.log('[Scraper] Recovered subscriber count:', data.subscriberCount);
         } else if (subFallback.textMatches && subFallback.textMatches.length > 0) {
-          data.subscriberCount = subFallback.textMatches[0];
-          console.log('[Scraper] Recovered from text walker:', data.subscriberCount);
+          const validMatch = subFallback.textMatches.find(t => /\d/.test(t));
+          if (validMatch) {
+            data.subscriberCount = validMatch;
+            console.log('[Scraper] Recovered from text walker:', data.subscriberCount);
+          }
         }
       }
     }

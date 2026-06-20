@@ -8,7 +8,6 @@ const channelCount = document.getElementById('channelCount');
 const scrapeBtn = document.getElementById('scrapeBtn');
 const clearBtn = document.getElementById('clearBtn');
 const progressSection = document.getElementById('progressSection');
-const progressTitle = document.getElementById('progressTitle');
 const progressBar = document.getElementById('progressBar');
 const progressText = document.getElementById('progressText');
 const progressCounter = document.getElementById('progressCounter');
@@ -169,7 +168,6 @@ async function startScrape() {
 
               case 'done':
                 updateProgress(channels.length, channels.length, 'Hoàn tất!');
-                finalizeProgress(successCount, errorCount);
                 break;
             }
 
@@ -183,7 +181,6 @@ async function startScrape() {
     }
   } catch (err) {
     showToast(`Lỗi kết nối: ${err.message}`, 'error');
-    finalizeProgress(successCount, errorCount);
   } finally {
     scrapeBtn.disabled = false;
     scrapeBtn.classList.remove('loading');
@@ -191,6 +188,7 @@ async function startScrape() {
     if (allResults.length > 0) {
       resultsSection.style.display = 'block';
       showToast(`Hoàn tất! ${successCount} kênh thành công`, 'success');
+      // Scroll to results
       resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
@@ -204,40 +202,6 @@ function updateProgress(current, total, text) {
   progressBar.style.width = `${pct}%`;
   progressText.textContent = text;
   progressCounter.textContent = `${current}/${total} kênh`;
-}
-
-/**
- * Called when scraping finishes (success or error).
- * Stops animation, updates title, resets state after delay.
- */
-function finalizeProgress(successCount, errorCount) {
-  // Stop shimmer animation, switch bar to solid green
-  progressBar.classList.add('done');
-
-  // Update title & counter badge
-  if (errorCount === 0) {
-    progressTitle.textContent = '✅ Hoàn tất!';
-  } else if (successCount === 0) {
-    progressTitle.textContent = '❌ Thất bại';
-  } else {
-    progressTitle.textContent = `✅ Hoàn tất (${errorCount} lỗi)`;
-  }
-  progressCounter.classList.add('done');
-
-  // Auto-hide progress section after 3 seconds
-  setTimeout(() => {
-    progressSection.style.opacity = '0';
-    progressSection.style.transition = 'opacity 0.6s ease';
-    setTimeout(() => {
-      progressSection.style.display = 'none';
-      progressSection.style.opacity = '';
-      progressSection.style.transition = '';
-      // Reset for next run
-      progressBar.classList.remove('done');
-      progressCounter.classList.remove('done');
-      progressTitle.textContent = '⏳ Đang xử lý';
-    }, 650);
-  }, 3000);
 }
 
 function updateStats(success, errors, total) {
@@ -426,32 +390,28 @@ scrapeBtn.disabled = true;
 // ============================================================
 // THEME TOGGLE LOGIC
 // ============================================================
-// SVG outline icons for theme toggle (tránh lỗi encoding emoji)
-const ICON_SUN = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
-const ICON_MOON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-
 const themeToggleBtn = document.getElementById('theme-toggle');
 if (themeToggleBtn) {
+  // Use innerHTML with HTML entities to avoid encoding issues
+  const SUN_ICON = '\u2600\uFE0F';   // ☀️
+  const MOON_ICON = '\uD83C\uDF19';  // 🌙
+
   const savedTheme = localStorage.getItem('theme');
-  if (savedTheme === 'light') {
-    document.body.classList.add('light-mode');
-    themeToggleBtn.innerHTML = ICON_SUN;
-    themeToggleBtn.title = 'Chuyển sang chế độ Tối';
+  if (savedTheme === 'dark') {
+    document.body.classList.add('dark-mode');
+    themeToggleBtn.innerHTML = SUN_ICON;
   } else {
-    themeToggleBtn.innerHTML = ICON_MOON;
-    themeToggleBtn.title = 'Chuyển sang chế độ Sáng';
+    themeToggleBtn.innerHTML = MOON_ICON;
   }
 
   themeToggleBtn.addEventListener('click', () => {
-    document.body.classList.toggle('light-mode');
-    if (document.body.classList.contains('light-mode')) {
-      localStorage.setItem('theme', 'light');
-      themeToggleBtn.innerHTML = ICON_SUN;
-      themeToggleBtn.title = 'Chuyển sang chế độ Tối';
-    } else {
+    document.body.classList.toggle('dark-mode');
+    if (document.body.classList.contains('dark-mode')) {
       localStorage.setItem('theme', 'dark');
-      themeToggleBtn.innerHTML = ICON_MOON;
-      themeToggleBtn.title = 'Chuyển sang chế độ Sáng';
+      themeToggleBtn.innerHTML = SUN_ICON;
+    } else {
+      localStorage.setItem('theme', 'light');
+      themeToggleBtn.innerHTML = MOON_ICON;
     }
   });
 }
